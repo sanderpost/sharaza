@@ -1,0 +1,18 @@
+# Local upstream reference clones & downloaded release artifacts
+.upstream/
+.tools/
+
+# Rust build artifacts
+target/
+
+# Swift / Xcode / Packaged App build artifacts
+.build/
+build/
+dist/
+DerivedData/
+*.xcodeproj/project.xcworkspace/
+*.xcodeproj/xcuserdata/
+
+# macOS / Editor
+.DS_Store
+*.swp

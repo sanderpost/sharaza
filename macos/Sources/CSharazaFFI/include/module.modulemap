@@ -1,0 +1,4 @@
+module CSharazaFFI {
+    header "sharaza_ffi.h"
+    export *
+}

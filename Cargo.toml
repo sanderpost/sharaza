@@ -1,0 +1,36 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/sharaza-core",
+    "crates/sharaza-ffi",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/ShareX/ShareX"
+authors = ["Sharaza Contributors"]
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "fs", "process", "sync", "net", "io-util"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+reqwest = { version = "0.12", default-features = false, features = ["native-tls", "json", "multipart", "stream"] }
+chrono = { version = "0.4", features = ["serde", "clock"] }
+regex = "1"
+uuid = { version = "1", features = ["v4"] }
+rand = "0.8"
+base64 = "0.22"
+url = "2"
+percent-encoding = "2"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp", "webp"] }
+qrcode = "0.14"
+crc32fast = "1"
+md-5 = "0.10"
+sha1 = "0.10"
+sha2 = "0.10"
+hex = "0.4"
+thiserror = "2"
+whoami = "1"
