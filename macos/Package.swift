@@ -24,7 +24,12 @@ let package = Package(
                 .swiftLanguageMode(.v5)
             ],
             linkerSettings: [
-                .unsafeFlags(["-L../target/release", "-lsharaza_ffi"]),
+                // Force the static archive. -lsharaza_ffi prefers the cdylib and
+                // records an absolute path that only exists on the build machine.
+                .unsafeFlags([
+                    "-Xlinker", "-force_load",
+                    "-Xlinker", "../target/release/libsharaza_ffi.a",
+                ]),
                 .linkedFramework("AppKit"),
                 .linkedFramework("SwiftUI"),
                 .linkedFramework("ScreenCaptureKit"),
