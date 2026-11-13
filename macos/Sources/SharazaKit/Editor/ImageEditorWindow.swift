@@ -131,6 +131,8 @@ public final class ImageEditorWindowController {
 
             let view = ImageEditorRootView(vm: vm)
             let hosting = NSHostingController(rootView: view)
+            // The canvas is a GeometryReader, so the default intrinsic size collapses the window.
+            hosting.sizingOptions = []
             let win = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 1120, height: 760),
                 styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -139,8 +141,11 @@ public final class ImageEditorWindowController {
             )
             win.title = "Sharaza Image Editor"
             win.contentViewController = hosting
-            win.center()
             win.isReleasedWhenClosed = false
+            EditorWindowLayout.applyInitialFrame(
+                to: win,
+                imagePixelSize: CGSize(width: cgImage.width, height: cgImage.height)
+            )
             NotificationCenter.default.addObserver(
                 forName: NSWindow.willCloseNotification,
                 object: win,
@@ -165,6 +170,71 @@ public final class ImageEditorWindowController {
     }
 }
 
+private enum EditorWindowLayout {
+    /// Wide enough that most tool buttons are visible without scrolling the tool strip.
+    static let toolbarContentWidth: CGFloat = 1120
+    static let minimumContentHeight: CGFloat = 640
+    /// Tool strip, style bar, dividers, and the canvas inset used by the 1:1 scale math.
+    static let chromeHeight: CGFloat = 48 + 48 + 32 + 8
+    static let canvasInset: CGFloat = 40
+
+    static func applyInitialFrame(to window: NSWindow, imagePixelSize: CGSize) {
+        let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }
+            ?? window.screen
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+        let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let maxContent = NSSize(
+            width: max(640, visible.width - 24),
+            height: max(480, visible.height - 36)
+        )
+        let minimum = NSSize(
+            width: min(toolbarContentWidth, maxContent.width),
+            height: min(minimumContentHeight, maxContent.height)
+        )
+        window.contentMinSize = minimum
+
+        let oneToOne = NSSize(
+            width: imagePixelSize.width + canvasInset,
+            height: imagePixelSize.height + chromeHeight
+        )
+        let fitted = NSSize(
+            width: min(max(oneToOne.width, minimum.width), maxContent.width),
+            height: min(max(oneToOne.height, minimum.height), maxContent.height)
+        )
+        window.setContentSize(fitted)
+        let frame = window.frame
+        window.setFrameOrigin(NSPoint(
+            x: visible.midX - frame.width / 2,
+            y: visible.midY - frame.height / 2
+        ))
+        // A saved frame replaces the 1:1 size. The first open has no saved frame.
+        let restored = window.setFrameAutosaveName("SharazaImageEditor")
+        let host = NSScreen.screens.max { lhs, rhs in
+            lhs.visibleFrame.intersection(window.frame).area < rhs.visibleFrame.intersection(window.frame).area
+        }
+        let target = (restored && host?.visibleFrame.intersects(window.frame) == true) ? host : screen
+        if let target {
+            window.setFrame(window.frame.fitted(into: target.visibleFrame), display: false)
+        }
+    }
+}
+
+private extension NSRect {
+    var area: CGFloat { max(0, width) * max(0, height) }
+
+    func fitted(into visible: NSRect) -> NSRect {
+        var rect = self
+        if rect.width > visible.width { rect.size.width = visible.width }
+        if rect.height > visible.height { rect.size.height = visible.height }
+        if rect.maxX > visible.maxX { rect.origin.x = visible.maxX - rect.width }
+        if rect.minX < visible.minX { rect.origin.x = visible.minX }
+        if rect.maxY > visible.maxY { rect.origin.y = visible.maxY - rect.height }
+        if rect.minY < visible.minY { rect.origin.y = visible.minY }
+        return rect
+    }
+}
+
 public struct ImageEditorRootView: View {
     @ObservedObject var vm: ImageEditorViewModel
 
@@ -178,40 +248,45 @@ public struct ImageEditorRootView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            // Top Tool Strip
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(EditorTool.allCases) { tool in
-                        Button {
-                            vm.selectedTool = tool
-                        } label: {
-                            Label(tool.rawValue, systemImage: tool.systemSymbol)
-                                .font(.system(size: 12, weight: .medium))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 5)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(vm.selectedTool == tool ? Color.accentColor.opacity(0.22) : Color.clear)
-                                )
-                        }
-                        .buttonStyle(.plain)
+            // Tool buttons wrap onto extra rows as the window narrows, matching ShareX.
+            FlowLayout(spacing: 6, lineSpacing: 6) {
+                ForEach(EditorTool.allCases) { tool in
+                    Button {
+                        vm.selectedTool = tool
+                    } label: {
+                        Label(tool.rawValue, systemImage: tool.systemSymbol)
+                            .font(.system(size: 12, weight: .medium))
+                            .lineLimit(1)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(vm.selectedTool == tool ? Color.accentColor.opacity(0.22) : Color.clear)
+                            )
                     }
-
-                    Divider().frame(height: 22)
-
-                    Button { vm.undo() } label: { Image(systemName: "arrow.uturn.backward") }
-                        .disabled(vm.undoStack.isEmpty)
-                        .help("Undo (⌘Z)")
-                    Button { vm.redo() } label: { Image(systemName: "arrow.uturn.forward") }
-                        .disabled(vm.redoStack.isEmpty)
-                        .help("Redo (⇧⌘Z)")
-                    Button { vm.clearAll() } label: { Image(systemName: "trash") }
-                        .disabled(vm.annotations.isEmpty)
-                        .help("Clear annotations")
+                    .buttonStyle(.plain)
+                    .fixedSize()
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+
+                Button { vm.undo() } label: { Image(systemName: "arrow.uturn.backward") }
+                    .disabled(vm.undoStack.isEmpty)
+                    .help("Undo (⌘Z)")
+                    .padding(5)
+                    .fixedSize()
+                Button { vm.redo() } label: { Image(systemName: "arrow.uturn.forward") }
+                    .disabled(vm.redoStack.isEmpty)
+                    .help("Redo (⇧⌘Z)")
+                    .padding(5)
+                    .fixedSize()
+                Button { vm.clearAll() } label: { Image(systemName: "trash") }
+                    .disabled(vm.annotations.isEmpty)
+                    .help("Clear annotations")
+                    .padding(5)
+                    .fixedSize()
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(.bar)
 
             Divider()
@@ -353,6 +428,7 @@ public struct ImageEditorRootView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func handleCanvasDrag(start: CGPoint, current: CGPoint) {
@@ -470,6 +546,76 @@ public struct ImageEditorRootView: View {
             vm.pushUndoSnapshot()
             vm.annotations.append(draft)
         }
+    }
+}
+
+/// Places children left to right and starts a new row when the next child does not fit.
+private struct FlowLayout: Layout {
+    var spacing: CGFloat
+    var lineSpacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(maxWidth: proposal.width ?? .greatestFiniteMagnitude, subviews: subviews)
+        let height = rows.reduce(CGFloat(0)) { $0 + $1.height } + lineSpacing * CGFloat(max(0, rows.count - 1))
+        let width = proposal.width ?? rows.map(\.width).max() ?? 0
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let rows = arrange(maxWidth: bounds.width, subviews: subviews)
+        var y = bounds.minY
+        for row in rows {
+            var x = bounds.minX
+            for item in row.items {
+                subviews[item.index].place(
+                    at: CGPoint(x: x, y: y + (row.height - item.size.height) / 2),
+                    anchor: .topLeading,
+                    proposal: ProposedViewSize(item.size)
+                )
+                x += item.size.width + spacing
+            }
+            y += row.height + lineSpacing
+        }
+    }
+
+    private struct Item {
+        var index: Int
+        var size: CGSize
+    }
+
+    private struct Row {
+        var items: [Item]
+        var width: CGFloat
+        var height: CGFloat
+    }
+
+    private func arrange(maxWidth: CGFloat, subviews: Subviews) -> [Row] {
+        var rows: [Row] = []
+        var current: [Item] = []
+        var rowWidth: CGFloat = 0
+        var rowHeight: CGFloat = 0
+
+        func flush() {
+            guard !current.isEmpty else { return }
+            rows.append(Row(items: current, width: rowWidth, height: rowHeight))
+            current = []
+            rowWidth = 0
+            rowHeight = 0
+        }
+
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.unspecified)
+            let nextWidth = current.isEmpty ? size.width : rowWidth + spacing + size.width
+            if !current.isEmpty, nextWidth > maxWidth + 0.5 {
+                flush()
+            }
+            let placedWidth = current.isEmpty ? size.width : rowWidth + spacing + size.width
+            current.append(Item(index: index, size: size))
+            rowWidth = placedWidth
+            rowHeight = max(rowHeight, size.height)
+        }
+        flush()
+        return rows
     }
 }
 
