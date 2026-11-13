@@ -47,6 +47,7 @@ public final class AppState: ObservableObject {
     @Published public var latestColorPick: ColorFormats?
     @Published public var latestQRImage: NSImage?
     @Published public var latestDecodedBarcodes: [String] = []
+    private var lastOpenedFile: (url: URL, at: Date)?
 
     public init(dataDirectory: URL? = nil) throws {
         let client = try RustCoreClient(dataDirectory: dataDirectory)
@@ -195,6 +196,10 @@ public final class AppState: ObservableObject {
     }
 
     public func handleOpenedFileURL(_ url: URL) {
+        if let last = lastOpenedFile, last.url == url, Date().timeIntervalSince(last.at) < 1 {
+            return
+        }
+        lastOpenedFile = (url, Date())
         if url.pathExtension.lowercased() == "sxcu",
            let text = try? String(contentsOf: url, encoding: .utf8),
            let saved = try? core.saveCustomUploader(sxcuJSON: text) {

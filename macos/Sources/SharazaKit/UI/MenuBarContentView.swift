@@ -1,10 +1,11 @@
 import AppKit
+import ServiceManagement
 import SwiftUI
 
 public struct MenuBarContentView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var recorder = ScreenRecorderService.shared
-    @Environment(\.openWindow) private var openWindow
+    @State private var launchAtStartup = LoginItemService.isEnabled
 
     public init(appState: AppState) {
         self.appState = appState
@@ -170,13 +171,80 @@ public struct MenuBarContentView: View {
         Divider()
 
         Button("Open Sharaza Workspace") {
-            openWindow(id: "main-workspace")
-            NSApp.activate(ignoringOtherApps: true)
+            WorkspaceWindow.show(appState: appState)
         }
+
+        Toggle("Launch at startup", isOn: Binding(
+            get: { launchAtStartup },
+            set: { updateLaunchAtStartup($0) }
+        ))
+        .onAppear { launchAtStartup = LoginItemService.isEnabled }
 
         Button("Quit Sharaza") {
             NSApp.terminate(nil)
         }
         .keyboardShortcut("q")
+    }
+
+    private func updateLaunchAtStartup(_ enabled: Bool) {
+        do {
+            try LoginItemService.setEnabled(enabled)
+            launchAtStartup = LoginItemService.isEnabled
+        } catch {
+            launchAtStartup = LoginItemService.isEnabled
+            let alert = NSAlert()
+            alert.messageText = "Could not update Launch at startup"
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
+        }
+    }
+}
+
+@MainActor
+private enum WorkspaceWindow {
+    private static var window: NSWindow?
+
+    static func show(appState: AppState) {
+        if let window {
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+            return
+        }
+        let host = NSHostingController(
+            rootView: MainWorkspaceView(appState: appState)
+                .frame(minWidth: 960, minHeight: 640)
+        )
+        let window = NSWindow(contentViewController: host)
+        window.title = "Sharaza"
+        window.styleMask = [.titled, .closable, .resizable, .miniaturizable]
+        window.setContentSize(NSSize(width: 1120, height: 740))
+        window.minSize = NSSize(width: 960, height: 640)
+        window.isReleasedWhenClosed = false
+        window.center()
+        self.window = window
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+    }
+}
+
+private enum LoginItemService {
+    static var isEnabled: Bool {
+        switch SMAppService.mainApp.status {
+        case .enabled, .requiresApproval:
+            true
+        default:
+            false
+        }
+    }
+
+    static func setEnabled(_ enabled: Bool) throws {
+        let service = SMAppService.mainApp
+        if enabled {
+            if service.status == .notRegistered || service.status == .notFound {
+                try service.register()
+            }
+        } else if service.status != .notRegistered {
+            try service.unregister()
+        }
     }
 }
