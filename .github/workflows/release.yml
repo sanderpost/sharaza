@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Test Rust core
+        run: cargo test --workspace
+
+      - name: Resolve version from tag
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          echo "SHARAZA_VERSION=$version" >> "$GITHUB_ENV"
+          echo "SHARAZA_BUILD=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+
+      - name: Build Sharaza.app
+        run: ./scripts/build-app.sh
+
+      - name: Test macOS app
+        run: swift test --package-path macos
+
+      - name: Zip app
+        run: ditto -c -k --keepParent dist/Sharaza.app "Sharaza-${SHARAZA_VERSION}-macos-arm64.zip"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="$RUNNER_TEMP/release-notes.md"
+          {
+            echo "Apple Silicon build of Sharaza ${SHARAZA_VERSION} (app.sharaza.macos). Requires macOS 14 or later. Intel Macs are not supported by this binary."
+            echo
+            echo "Built from commit ${GITHUB_SHA}."
+            echo
+            echo "This build is ad-hoc signed and not notarized, so macOS Gatekeeper will block the first launch after download. Unzip the archive, then run:"
+            echo
+            echo '```bash'
+            echo "xattr -dr com.apple.quarantine Sharaza.app"
+            echo "open Sharaza.app"
+            echo '```'
+            echo
+            echo "Grant Screen Recording when macOS asks. To install, drag Sharaza.app to /Applications."
+          } > "$notes"
+          gh release create "$GITHUB_REF_NAME" \
+            "Sharaza-${SHARAZA_VERSION}-macos-arm64.zip" \
+            --title "Sharaza ${SHARAZA_VERSION}" \
+            --notes-file "$notes"

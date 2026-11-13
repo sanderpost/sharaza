@@ -40,6 +40,17 @@ open dist/Sharaza.app
 ```
 To install system-wide, drag `dist/Sharaza.app` to `/Applications`.
 
+### Publish a release
+
+Push a `v*` tag to build that commit on GitHub and attach `Sharaza.app` to a release. The tag is the version (`v0.2.0` stamps the app as `0.2.0`). Nothing is versioned automatically.
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The release asset is an Apple Silicon zip. It is ad-hoc signed until a Developer ID certificate is available, so first launch still needs `xattr -dr com.apple.quarantine Sharaza.app`.
+
 ### Run Automated Verification Suites
 ```bash
 # 1. Rust Core + C ABI FFI + Upstream .sxcu Corpus Tests

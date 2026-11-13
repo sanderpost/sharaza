@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export PATH="/opt/homebrew/bin:$PATH"
+VERSION="${SHARAZA_VERSION:-0.1.0}"
+BUILD_NUMBER="${SHARAZA_BUILD:-1}"
 
 echo "==> [1/4] Building Rust Core & C ABI Static Library (release)..."
 cargo build --manifest-path "$ROOT_DIR/Cargo.toml" --release -p sharaza-ffi
@@ -101,7 +103,7 @@ SWIFT
 iconutil -c icns "$ICONSET_DIR" -o "$RESOURCES_DIR/AppIcon.icns"
 rm -rf "$(dirname "$ICONSET_DIR")"
 
-cat > "$CONTENTS_DIR/Info.plist" << 'PLIST'
+cat > "$CONTENTS_DIR/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -123,9 +125,9 @@ cat > "$CONTENTS_DIR/Info.plist" << 'PLIST'
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>${VERSION}</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>${BUILD_NUMBER}</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>NSHighResolutionCapable</key>
